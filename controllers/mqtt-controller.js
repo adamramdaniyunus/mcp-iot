@@ -35,7 +35,7 @@ const handlemqttMessage = async (req, res) => {
     if (!prompt) {
         return res.status(400).send({ error: 'Prompt is required' });
     }
-    logger.debug('[BODY] Prompt:', prompt);
+    logger.info('[BODY] Prompt:', prompt);
     // classify the prompt using AI
     try {
         const { topic, status, responseAI } = await classifyPrompt(prompt);
@@ -43,7 +43,11 @@ const handlemqttMessage = async (req, res) => {
         logger.debug('[LOG] Status:', status);
         logger.debug('[LOG] Response from AI:', responseAI);
 
+        // hit hardware tools like esp32, esp8266, etc.
+        // topic includes 'rumah/lampu', 'rumah/ruangtamu/lampu', 'rumah/kamar/lampu', 'rumah/dapur/lampu'
+        // status includes 'ON' or 'OFF'
         // publish the message to the MQTT broker
+        // in esp32, esp8266, etc. subscribe to the topic and get the status
         publishMessage(topic, status);
 
         // Send the response back to the client
@@ -85,35 +89,40 @@ async function callGemini(prompt) {
     try {
         const systemPrompt = `
         Kamu adalah asisten virtual yang membantu pengguna mengontrol perangkat rumah pintar.
-        Tugas kamu adalah mengklasifikasikan perintah pengguna dan memberikan respons yang sesuai.
-        Berikut adalah beberapa contoh perintah yang mungkin kamu terima:
-        - "Nyalakan lampu di ruang tamu"
-        - "Matikan lampu di kamar tidur"
-        - "Nyalakan lampu dapur"
-        - "Matikan lampu di ruang tamu"
 
-        topik yang tersedia dalam perintah tersebut adalah:
+        Tugas kamu:
+        1. Mengklasifikasikan perintah pengguna menjadi 'topic' dan 'status'.
+        2. Memberikan respons alami dan menyenangkan yang sesuai konteks.
+
+        Topik yang tersedia:
         - rumah/lampu
         - rumah/ruangtamu/lampu
         - rumah/kamar/lampu
         - rumah/dapur/lampu
-        - rumah/ruangtamu/lampu
 
-        Jika topik tidak termasuk dalam daftar berikut, pilih yang paling mendekati:
-        - rumah/lampu
-        - rumah/ruangtamu/lampu
-        - rumah/kamar/lampu
-        - rumah/dapur/lampu
-        - rumah/ruangtamu/lampu
+        Jika tidak cocok, pilih topik yang paling mendekati.
 
-
-        Berdasarkan perintah tersebut, kamu harus mengeluarkan topik dan status yang sesuai.
-        Misalnya, untuk perintah "Nyalakan lampu di ruang tamu", kamu harus mengeluarkan:
+        Format output harus seperti berikut:
         {
-            topic: "rumah/ruangtamu/lampu",
-            status: "ON",
-            responseAI: "Baik, lampu ruang tamu dinyalakan."
+            topic: "topik_yang_sesuai",
+            status: "ON" atau "OFF",
+            responseAI: "respons santai, alami, dan menyenangkan sesuai status dan topik"
         }
+
+        Contoh:
+        Perintah: "Matikan lampu kamar"
+        Output:
+        {
+            topic: "rumah/kamar/lampu",
+            status: "OFF",
+            responseAI: "Siap, lampu kamar sudah dimatikan. Tidur nyenyak ya!"
+        }
+
+        Kamu boleh variasikan gaya bicara dalam 'responseAI', selama:
+        - Masih sesuai konteks 'topic' dan 'status'
+        - Tetap terdengar ramah dan membantu
+        - Tidak kaku atau berulang-ulang
+
     `;
 
         // call the AI API with the prompt and systemPrompt
@@ -122,7 +131,7 @@ async function callGemini(prompt) {
             { role: 'user', content: prompt }
         ]);
 
-        logger.debug('[RESPONSE] Sending Response From AI', response.content);
+        logger.info('[RESPONSE] Sending Response From AI', response.content);
         const responseData = response.content;
         const cleanResponse = responseData
             .replace(/(\w+):/g, '"$1":') // quote keys
